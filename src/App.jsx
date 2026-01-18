@@ -1,17 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { db } from "./firebase"; //Importăm conexiunea către Firestore (db) din firebase.js.
+import { db } from "./firebase";
 import {
   addDoc,
-  collection, // referință către o colecție (ex: "tasks")
+  collection,
   deleteDoc,
   doc,
-  onSnapshot, // READ în timp real (subscribe / listener)
+  onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
-  writeBatch, // când faci reorder, scriem order pentru toate
-} from "firebase/firestore"; // importăm funcții Firestore pe care le folosim pentru CRUD
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+  writeBatch,
+} from "firebase/firestore";
 import { auth } from "./firebase";
 import {
   onAuthStateChanged,
@@ -21,18 +20,13 @@ import {
 } from "firebase/auth";
 import { where } from "firebase/firestore";
 
-// Limită cerută (input validation)
-const MAX_LEN = 100;
+// Import components
+import AuthForm from "./components/AuthForm";
+import Header from "./components/Header";
+import TaskForm, { MAX_LEN } from "./components/TaskForm";
+import TaskFilters from "./components/TaskFilters";
+import TaskList from "./components/TaskList";
 
-const CATEGORIES = [
-  { name: "Work", emoji: "💼" },
-  { name: "School", emoji: "🏫" },
-  { name: "Personal", emoji: "💗" },
-  { name: "Shopping", emoji: "🛍️" },
-  { name: "Home things", emoji: "🏠" },
-];
-
-// 1) STATE (starea aplicației)
 export default function App() {
   const [text, setText] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -64,9 +58,11 @@ export default function App() {
     const q = query(
       collection(db, "tasks"),
       where("uid", "==", user.uid)
-    ); // ascultare in timp real la colectia tasks
+    ); // ascultare in timp real 
 
-    const unsub = onSnapshot(q,(snap) => {
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
         const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setTasks(items);
       },
@@ -78,7 +74,7 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
-// Auth state listener
+  // Auth state listener
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
     return () => unsub();
@@ -87,7 +83,6 @@ export default function App() {
   // 3) CREATE (adăugare task în Firestore)
   async function addTask(e) {
     if (!user) return setError("Trebuie să te loghezi ca să adaugi task-uri.");
-
 
     e.preventDefault();
     const t = text.trim();
@@ -161,11 +156,6 @@ export default function App() {
   const pendingCount = tasks.filter((t) => t.status === "pending").length;
   const doneCount = tasks.filter((t) => t.status === "completed").length;
 
-  // Emoji pentru categorie (doar pentru UI)
-  function catEmoji(cat) {
-    return CATEGORIES.find((c) => c.name === cat)?.emoji ?? "💗";
-  }
-
   // onDragEnd: gestionarea finalizării unei operațiuni de drag-and-drop
   async function onDragEnd(result) {
     // 🔒 Drag & drop permis DOAR în modul Manual
@@ -199,7 +189,8 @@ export default function App() {
     });
     await batch.commit();
   }
-//Metoda prin care se creaza un cont nou: user + parola
+
+  // Metoda prin care se creaza un cont nou: user + parola
   async function signup(e) {
     e.preventDefault();
     setAuthError("");
@@ -211,7 +202,8 @@ export default function App() {
       setAuthError(err.message);
     }
   }
- //Metoda prin care se face login cu user + parola
+
+  // Metoda prin care se face login cu user + parola
   async function login(e) {
     e.preventDefault();
     setAuthError("");
@@ -223,6 +215,7 @@ export default function App() {
       setAuthError(err.message);
     }
   }
+
   // Metoda prin care se face logout
   async function logout() {
     await signOut(auth);
@@ -230,209 +223,53 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-pink-50">
-      <div className="app-container">
-        <div className="app-card">
-          {/* Header */}
-          <header className="app-header">
-            <div>
-              <h1 className="app-title">💖 Lista Renatei</h1>
-              <p className="text-sm text-pink-600">
-              Bifează task-urile zilnice ca să fii organizată ✨
-              </p>
-            </div>
-
-            <div className="text-right">
-              <div className="category-form-label">Pending</div>
-              <div className="font-bold text-rose-700">{pendingCount}</div>
-              <div className="category-form-label">Done</div>
-              <div className="font-bold text-rose-700">{doneCount}</div>
-            </div>
-          </header>
-
-          {/* Form (DESKTOP grid din CSS: task-form) */}
-          
-          <form onSubmit={addTask} className="task-form">
-  {/* CARD 1: Task + Deadline */}
-  <div className="container-tasks-deadline-category">
-  <div>
-        <label className="form-label-custom">✍️ Task (max {MAX_LEN})</label>
-
-        <input
-          className="task-input"
-          placeholder="Ex: cumpăr luciu de buze 💄"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
+      {/* Auth section */}
+      {!user ? (
+        <AuthForm
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          onLogin={login}
+          onSignup={signup}
+          authError={authError}
         />
+      ) : (
+        <div className="app-container">
+          <div className="app-card">
+            {/* Header */}
+            <Header pendingCount={pendingCount} doneCount={doneCount} onLogout={logout} user={user} />
 
-<div className="row-between">
-          <span className="task-counter">
-            {text.trim().length}/{MAX_LEN}
-          </span>
+            {/* Form */}
+            <TaskForm
+              text={text}
+              setText={setText}
+              deadline={deadline}
+              setDeadline={setDeadline}
+              category={category}
+              setCategory={setCategory}
+              error={error}
+              onSubmit={addTask}
+            />
 
-        </div>
-        </div>
-   <div className="category-dropdown">
-        <label className="form-label-custom">🎀 Categorie</label>
-        <select
-          className="category-select"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          {CATEGORIES.map((c) => (
-            <option key={c.name} value={c.name}>
-              {c.emoji} {c.name}
-            </option>
-          ))}
-        </select>
-        </div>
+            {/* Controls */}
+            <TaskFilters filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} />
 
-        <div className="create-task-card">
-        <label className="form-label-custom">📅 Deadline</label>
-        <input
-          type="date"
-          className="deadline-input"
-          value={deadline}
-          onChange={(e) => setDeadline(e.target.value)}
-        />
-      </div>
+            {/* List with Drag & Drop */}
+            <TaskList
+              tasks={visibleTasks}
+              onDragEnd={onDragEnd}
+              onToggle={toggleTask}
+              onRemove={removeTask}
+              dragErrorTaskId={dragErrorTaskId}
+            />
 
-        
-        
-      
-    </div>
-    <div className="create-task-card-button-component">
-        <button className="create-task-btn" type="submit">
-          ➕ Add task
-        </button>
-        {error && <span className="error-message">{error}</span>}
-      </div>
-
-</form>
-          {/* Controls */}
-          <div className="rounded-3xl bg-white shadow-sm border border-pink-100 p-4 flex items-center justify-between gap-4">
-            <div className="flex gap-2 items-center">
-              <span className="text-sm font-semibold text-rose-700">Filter:</span>
-              <select
-                className=".filter-button"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                <option value="all">All</option>
-                <option value="pending">Pending</option>
-                <option value="completed">Completed</option>
-              </select>
-            </div>
-
-            <div className="flex gap-2 items-center">
-              <span className="text-sm font-semibold text-rose-700">Sort:</span>
-              <select
-                className="task-select"
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-              >
-                <option value="manual">Manual (drag & drop)</option>
-                <option value="createdAt">Creation date</option>
-                <option value="deadline">Deadline</option>
-              </select>
-            </div>
+            <p className="text-xs text-rose-400 text-center pt-4">
+              Tip: Click pe task ca să îl marchezi ✅ / ⏳
+            </p>
           </div>
-
-          {/* List with Drag & Drop */}
-          {visibleTasks.length === 0 ? (
-            <div className="text-center text-rose-400 py-10">
-              🎀 No tasks yet. Add one above!
-            </div>
-          ) : (
-            <div className="task-list">
-              <DragDropContext onDragEnd={onDragEnd}>
-                <Droppable droppableId="tasks">
-                  {(provided) => (
-                    <div ref={provided.innerRef} {...provided.droppableProps}>
-                      {visibleTasks.map((t, index) => {
-                        const done = t.status === "completed";
-
-                        return (
-                          <Draggable key={t.id} draggableId={t.id} index={index}>
-                            {(prov) => (
-                              <div
-                                ref={prov.innerRef}
-                                {...prov.draggableProps}
-                                className={`${done ? "opacity-70" : ""}`}
-                              >
-                                <div className={`task-card ${done ? "task-done" : ""}`}>
-                                  {/* Drag handle */}
-                                  <div
-                                    {...prov.dragHandleProps}
-                                    className="rounded-xl border border-pink-200 px-4 py-3 text-rose-700 select-none cursor-grab active:cursor-grabbing"
-                                    title="Drag to reorder"
-                                  >
-                                    ⠿
-                                  </div>
-
-                                  {/* (îl lași așa momentan) mesajul e în card */}
-                                  {dragErrorTaskId === t.id && (
-                                    <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-2xl px-3 py-2">
-                                      ⚠️ Plasează task-ul în interiorul listei
-                                    </div>
-                                  )}
-
-                                  <button
-                                    onClick={() => toggleTask(t)}
-                                    className="flex-1 text-left"
-                                    title="Click to toggle completed"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-lg">{catEmoji(t.category)}</span>
-                                      <span className="font-semibold text-rose-800">
-                                        {t.text}
-                                      </span>
-                                      <span className="text-xs px-2 py-0.5 rounded-full border border-pink-200 text-rose-600">
-                                        {t.category || "Personal"}
-                                      </span>
-                                    </div>
-
-                                    <div className="text-xs text-rose-400 mt-1">
-                                      {t.deadline ? `📅 ${t.deadline}` : "📅 no deadline"} •{" "}
-                                      {done ? "✅ completed" : "⏳ pending"}
-                                    </div>
-                                  </button>
-
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => toggleTask(t)}
-                                      className="task-btn"
-                                      type="button"
-                                    >
-                                      {done ? "Undo" : "Done"}
-                                    </button>
-
-                                    <button
-                                      onClick={() => removeTask(t)}
-                                      className="task-btn"
-                                      type="button"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </Draggable>
-                        );
-                      })}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </DragDropContext>
-            </div>
-          )}
-
-          <p className="text-xs text-rose-400 text-center pt-4">
-            Tip: Click pe task ca să îl marchezi ✅ / ⏳
-          </p>
         </div>
-      </div>
+      )}
     </div>
   );
 }
