@@ -1,16 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { db } from "./firebase";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  updateDoc,
-  writeBatch,
-} from "firebase/firestore";
 import { auth } from "./firebase";
 import {
   onAuthStateChanged,
@@ -18,7 +6,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { where } from "firebase/firestore";
+
+import { apiGetTasks, apiCreateTask, apiToggleTask, apiDeleteTask } from "./api";
 
 // Import components
 import AuthForm from "./components/AuthForm";
@@ -48,32 +37,36 @@ export default function App() {
   const [filter, setFilter] = useState("all"); // all | pending | completed
   const [sort, setSort] = useState("manual"); // manual | createdAt | deadline
 
-  // 2) READ (citire din Firestore,din colectia tasks în timp real)
+  // 2) READ (citire din API care citeste din colectia tasks în timp real)
   useEffect(() => {
     if (!user) {
       setTasks([]);
       return;
     }
-
-    const q = query(
-      collection(db, "tasks"),
-      where("uid", "==", user.uid)
-    ); // ascultare in timp real 
-
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setTasks(items);
-      },
-      (err) => {
+    async function loadTasks() {
+      try {
+        setError("");
+    
+        const data = await apiGetTasks(user.uid);
+    
+        // 🔴 dacă API-ul spune că a eșuat
+        if (!data.success) {
+          setError(data.message || "Nu pot încărca task-urile din API.");
+          setTasks([]);
+          return;
+        }
+    
+        // ✅ succes
+        setTasks(data.tasks || []);
+      } catch (err) {
         console.error(err);
-        setError("Nu pot citi din Firebase. Verifică Firestore + rules.");
+        setError("Nu pot încărca task-urile din API.");
+        setTasks([]);
       }
-    );
-    return () => unsub();
+    }
+  
+    loadTasks();
   }, [user]);
-
   // Auth state listener
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -95,34 +88,62 @@ export default function App() {
     // Calculăm order pentru task-ul nou
     const maxOrder = tasks.reduce((m, x) => Math.max(m, x.order ?? 0), 0);
 
-    // Scriem în Firestore (persistență)
-    await addDoc(collection(db, "tasks"), {
+    // Create task via API
+    try{
+    await apiCreateTask({
       text: t,
-      status: "pending",
       category,
       deadline: deadline || "",
-      createdAt: serverTimestamp(),
       order: maxOrder + 1,
       uid: user.uid,
     });
+    
+    // refresh list (ca să vezi imediat task-ul)
+    const data = await apiGetTasks(user.uid);
+    setTasks(data.tasks || []);
 
     // Resetăm formularul după succes
     setText("");
     setDeadline("");
     setCategory("Personal");
+  }catch (err) {
+    console.error(err);
+    setError("Nu am putut crea task-ul.");
   }
+}
 
-  // 4) UPDATE (modificare task în Firestore)
-  async function toggleTask(task) {
-    await updateDoc(doc(db, "tasks", task.id), {
-      status: task.status === "completed" ? "pending" : "completed",
-    });
-  }
+  // 4) UPDATE (toggle pending <-> completed)
+async function toggleTask(task) {
+  try {
+    if (!user) return;
 
-  // 5) DELETE (ștergere task din Firestore)
-  async function removeTask(task) {
-    await deleteDoc(doc(db, "tasks", task.id));
+    // ✅ toggle prin API (pending <-> completed)
+    await apiToggleTask(task.id, user.uid);
+
+    // refresh list
+    const data = await apiGetTasks(user.uid);
+    setTasks(data.tasks || []);
+  } catch (err) {
+    console.error(err);
+    setError("Nu am putut schimba statusul task-ului.");
   }
+}
+
+
+  // 5) DELETE task
+async function removeTask(task) {
+  try {
+    if (!user) return;
+
+    await apiDeleteTask(task.id, user.uid);
+
+    const data = await apiGetTasks(user.uid);
+    setTasks(data.tasks || []);
+  } catch (err) {
+    console.error(err);
+    setError("Nu am putut șterge task-ul.");
+  }
+}
 
   // 6) Derivări în UI: filtrare + sortare
   const visibleTasks = useMemo(() => {
@@ -257,11 +278,12 @@ export default function App() {
 
             {/* List with Drag & Drop */}
             <TaskList
-              tasks={visibleTasks}
-              onDragEnd={onDragEnd}
-              onToggle={toggleTask}
-              onRemove={removeTask}
-              dragErrorTaskId={dragErrorTaskId}
+             tasks={visibleTasks}
+             onDragEnd={onDragEnd}
+             onToggle={toggleTask}
+             onRemove={removeTask}
+             dragErrorTaskId={dragErrorTaskId}
+             sort={sort}
             />
 
             <p className="text-xs text-rose-400 text-center pt-4">

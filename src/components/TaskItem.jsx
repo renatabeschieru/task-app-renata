@@ -13,11 +13,16 @@ export default function TaskItem({
   onToggle,
   onRemove,
   dragErrorTaskId,
+  sort,
 }) {
   const done = task.status === "completed";
 
   return (
-    <Draggable draggableId={task.id} index={index}>
+    <Draggable
+  draggableId={task.id}
+  index={index}
+  isDragDisabled={sort !== "manual"}
+>
       {(prov) => (
         <div
           ref={prov.innerRef}

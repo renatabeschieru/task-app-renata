@@ -8,6 +8,7 @@ export default function TaskList({
   onToggle,
   onRemove,
   dragErrorTaskId,
+  sort,
 }) {
   if (tasks.length === 0) {
     return (
@@ -24,14 +25,15 @@ export default function TaskList({
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps}>
               {tasks.map((task, index) => (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  index={index}
-                  onToggle={onToggle}
-                  onRemove={onRemove}
-                  dragErrorTaskId={dragErrorTaskId}
-                />
+               <TaskItem
+               key={task.id}
+               task={task}
+               index={index}
+               onToggle={onToggle}
+               onRemove={onRemove}
+               dragErrorTaskId={dragErrorTaskId}
+               sort={sort}
+             />
               ))}
               {provided.placeholder}
             </div>

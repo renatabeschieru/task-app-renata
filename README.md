@@ -1,16 +1,71 @@
-# React + Vite
+# Task App – Web Application
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Overview
+This project is a full-stack **Task Management Web Application** built with **React**, **Firebase**, and a custom **Node.js API**.  
+Users can register, log in, and manage their own task list with persistent storage, filtering, sorting, and drag-and-drop reordering.
 
-Currently, two official plugins are available:
+The application was developed as a **solo project** and follows modern web development best practices: component-based architecture, hooks, REST APIs, and documentation with Swagger (OpenAPI).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### ✅ Authentication
+- User authentication using **Firebase Authentication**
+- Email & password login / signup
+- Each user can access **only their own tasks**
 
-## Expanding the ESLint configuration
+### ✅ Task Management (CRUD)
+- Create tasks (text, category, deadline)
+- Read tasks from a persistent data source (**Firestore**)
+- Update task status (pending ↔ completed)
+- Delete tasks
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### ✅ Drag & Drop Reordering
+- Tasks can be reordered using **drag and drop**
+- Implemented with `@hello-pangea/dnd`
+- Task order is persisted in Firestore using an `order` field
+
+### ✅ Filtering & Sorting
+- Filter tasks by:
+  - All
+  - Pending
+  - Completed
+- Sort tasks by:
+  - Manual order (drag & drop)
+  - Creation date
+  - Deadline
+
+### ✅ Responsive UI
+- Styled using **Tailwind CSS**
+- Mobile-friendly and responsive layout
+- Clean, card-based design
+
+---
+
+## Technologies Used
+
+### Frontend
+- **React**
+- React Hooks: `useState`, `useEffect`, `useMemo`
+- **Tailwind CSS** for styling
+- **Firebase Authentication**
+- Drag & Drop library: `@hello-pangea/dnd`
+
+### Backend
+- **Node.js**
+- **Express.js**
+- **Firebase Admin SDK**
+- REST API for task operations
+- **Swagger (OpenAPI)** for API documentation
+
+### Database
+- **Firebase Firestore**
+- Persistent storage of tasks
+- Tasks are linked to users via `uid`
+
+---
+
+## Application Architecture
+
+### Component Structure
