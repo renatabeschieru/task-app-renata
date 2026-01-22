@@ -3,6 +3,7 @@ const cors = require("cors");
 const admin = require("firebase-admin");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
+require("dotenv").config();
 
 const app = express();
 app.use(cors());
@@ -12,7 +13,7 @@ app.use(express.json());
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // 🔐 conectare backend la Firebase (Firestore) cu Service Account
-const serviceAccount = require("./serviceAccountKey.json");
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
