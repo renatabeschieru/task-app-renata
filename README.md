@@ -1,71 +1,54 @@
-# Task App – Web Application
+## Key Features (Frontend + Backend)
 
-## Overview
-This project is a full-stack **Task Management Web Application** built with **React**, **Firebase**, and a custom **Node.js API**.  
-Users can register, log in, and manage their own task list with persistent storage, filtering, sorting, and drag-and-drop reordering.
+### Authentication (Firebase Auth)
+- Users can sign up / log in with email + password.
+- After login, the app loads only the tasks that belong to the logged-in user (filtered by `uid`).
 
-The application was developed as a **solo project** and follows modern web development best practices: component-based architecture, hooks, REST APIs, and documentation with Swagger (OpenAPI).
+### Task API (Express + Firestore)
+The frontend does NOT write directly to Firestore anymore.
+Instead, it calls a custom REST API, and the backend persists data to Firestore using `firebase-admin`.
 
----
+**Endpoints:**
+- `GET /api/tasks?uid=...` → returns the user’s tasks
+- `POST /api/tasks` → creates a new task
+- `PATCH /api/tasks/:id/toggle?uid=...` → toggles `pending <-> completed`
+- `DELETE /api/tasks/:id?uid=...` → deletes a task
+- `PATCH /api/tasks/reorder?uid=...` → saves drag & drop order
+- `POST /api/tasks/sync?uid=...` → sync offline tasks from IndexedDB
 
-## Features
+### Toggle (Done / Undo) logic
+When the user clicks a task card or presses the Done/Undo button:
+1. Frontend calls `PATCH /api/tasks/:id/toggle?uid=...`
+2. Backend verifies ownership (`task.uid === uid`) and updates `status`
+3. Frontend reloads tasks with `GET /api/tasks?uid=...` to stay in sync
 
-### ✅ Authentication
-- User authentication using **Firebase Authentication**
-- Email & password login / signup
-- Each user can access **only their own tasks**
+### Delete logic
+When the user presses the trash icon:
+1. Frontend calls `DELETE /api/tasks/:id?uid=...`
+2. Backend verifies ownership and deletes the task in Firestore
+3. Frontend reloads tasks via `GET /api/tasks?uid=...`
 
-### ✅ Task Management (CRUD)
-- Create tasks (text, category, deadline)
-- Read tasks from a persistent data source (**Firestore**)
-- Update task status (pending ↔ completed)
-- Delete tasks
+### Drag & Drop reorder
+Drag & drop is implemented with **@hello-pangea/dnd**.
+- UI reorder happens instantly (optimistic update)
+- When online, the app persists the order by calling:
+  `PATCH /api/tasks/reorder?uid=...` with `orderedIds`
 
-### ✅ Drag & Drop Reordering
-- Tasks can be reordered using **drag and drop**
-- Implemented with `@hello-pangea/dnd`
-- Task order is persisted in Firestore using an `order` field
+### Offline support (IndexedDB + Sync)
+If the user is offline:
+- New tasks are stored locally in IndexedDB (`localOnly: true`)
+- When the connection is restored:
+  - the app calls `POST /api/tasks/sync?uid=...`
+  - backend writes tasks to Firestore
+  - local offline queue is cleared
+  - tasks are reloaded from the API
 
-### ✅ Filtering & Sorting
-- Filter tasks by:
-  - All
-  - Pending
-  - Completed
-- Sort tasks by:
-  - Manual order (drag & drop)
-  - Creation date
-  - Deadline
+### Styling & UI
+- Tailwind CSS is used for layout and responsive design.
+- App structure is component-based (AuthForm, Header, TaskForm, TaskList, TaskItem etc.)
+- Hooks used: `useState`, `useEffect`, `useMemo`
 
-### ✅ Responsive UI
-- Styled using **Tailwind CSS**
-- Mobile-friendly and responsive layout
-- Clean, card-based design
-
----
-
-## Technologies Used
-
-### Frontend
-- **React**
-- React Hooks: `useState`, `useEffect`, `useMemo`
-- **Tailwind CSS** for styling
-- **Firebase Authentication**
-- Drag & Drop library: `@hello-pangea/dnd`
-
-### Backend
-- **Node.js**
-- **Express.js**
-- **Firebase Admin SDK**
-- REST API for task operations
-- **Swagger (OpenAPI)** for API documentation
-
-### Database
-- **Firebase Firestore**
-- Persistent storage of tasks
-- Tasks are linked to users via `uid`
-
----
-
-## Application Architecture
-
-### Component Structure
+### API Documentation (Swagger / OpenAPI)
+Swagger UI is available at:
+- `http://localhost:3000/api-docs`
+It documents all REST endpoints and request/response payloads.

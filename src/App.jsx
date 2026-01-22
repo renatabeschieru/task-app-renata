@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 
 import { apiGetTasks, apiCreateTask, apiToggleTask, apiDeleteTask } from "./api";
+import { queueOfflineTask, getOfflineTasks, removeOfflineTask } from "./offlineDb";
 
 // Import components
 import AuthForm from "./components/AuthForm";
@@ -16,16 +17,18 @@ import TaskForm, { MAX_LEN } from "./components/TaskForm";
 import TaskFilters from "./components/TaskFilters";
 import TaskList from "./components/TaskList";
 
+//memoria UI-ului (starea aplicației)
 export default function App() {
   const [text, setText] = useState("");
   const [deadline, setDeadline] = useState("");
   const [category, setCategory] = useState("Personal");
   const [error, setError] = useState("");
   const [dragErrorTaskId, setDragErrorTaskId] = useState(null);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null); //	user === null → nimeni nu e logat
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   /**
    * tasks = lista de task-uri citită din Firestore.
@@ -33,30 +36,54 @@ export default function App() {
    */
   const [tasks, setTasks] = useState([]);
 
-  // Filtrare și sortare (cerință)
+  // Filtrare și sortare (optiunile UI-ului)
   const [filter, setFilter] = useState("all"); // all | pending | completed
   const [sort, setSort] = useState("manual"); // manual | createdAt | deadline
 
-  // 2) READ (citire din API care citeste din colectia tasks în timp real)
+//Listener de online/offline
+//actualizează isOnline AUTOMAT când se schimbă situația conexiunii
+//[]: Rulează o singură dată la mount și adaugă event listeners
   useEffect(() => {
+    function onOnline() {
+      setIsOnline(true);
+    }
+    function onOffline() {
+      setIsOnline(false);
+    }
+  
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+  
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  // READ 
+  //Când se schimbă user (login/logout) sau se schimbă conexiunea, reîncarci lista cu apiGetTasks(user.uid)
+  useEffect(() => {
+   //setTasks([]) -> când nu exista utilizator autentificat, golim lista
     if (!user) {
       setTasks([]);
       return;
     }
+  
+    // dacă ești offline, NU încercăm să chemăm API
+    if (!isOnline) return;
+  
     async function loadTasks() {
       try {
         setError("");
-    
+  
         const data = await apiGetTasks(user.uid);
-    
-        // 🔴 dacă API-ul spune că a eșuat
+  
         if (!data.success) {
           setError(data.message || "Nu pot încărca task-urile din API.");
           setTasks([]);
           return;
         }
-    
-        // ✅ succes
+  
         setTasks(data.tasks || []);
       } catch (err) {
         console.error(err);
@@ -66,8 +93,10 @@ export default function App() {
     }
   
     loadTasks();
-  }, [user]);
-  // Auth state listener
+  }, [user, isOnline]);
+
+  // Listener de autentificare, asculta schimbarile de autentificare din Firebase
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
     return () => unsub();
@@ -76,64 +105,117 @@ export default function App() {
   // 3) CREATE (adăugare task în Firestore)
   async function addTask(e) {
     if (!user) return setError("Trebuie să te loghezi ca să adaugi task-uri.");
-
+  
     e.preventDefault();
     const t = text.trim();
-
+  
     if (!t) return setError("Task-ul nu poate fi gol 🥺");
     if (t.length > MAX_LEN) return setError(`Maxim ${MAX_LEN} caractere ✂️`);
-
+  
     setError("");
-
-    // Calculăm order pentru task-ul nou
+  
     const maxOrder = tasks.reduce((m, x) => Math.max(m, x.order ?? 0), 0);
+  
+    // ✅ OFFLINE: salvăm în IndexedDB + afișăm imediat
+    if (!isOnline) {
+      const localTask = {
+        uid: user.uid,
+        text: t,
+        deadline: deadline || "",
+        category,
+        order: maxOrder + 1,
+        status: "pending",
+        createdAtClient: Date.now(),
+      };
 
-    // Create task via API
-    try{
-    await apiCreateTask({
-      text: t,
-      category,
-      deadline: deadline || "",
-      order: maxOrder + 1,
-      uid: user.uid,
-    });
-    
-    // refresh list (ca să vezi imediat task-ul)
-    const data = await apiGetTasks(user.uid);
-    setTasks(data.tasks || []);
+      // 1) Afișează imediat în UI (indiferent dacă IndexedDB reușește sau nu)
+      setTasks((prev) => [
+        ...prev,
+        { ...localTask, id: `local-${localTask.createdAtClient}`, localOnly: true },
+      ]);
 
-    // Resetăm formularul după succes
-    setText("");
-    setDeadline("");
-    setCategory("Personal");
-  }catch (err) {
-    console.error(err);
-    setError("Nu am putut crea task-ul.");
+
+      // 2) Încearcă să îl pui și în IndexedDB (pentru sincronizare ulterioară)
+      try {
+        await queueOfflineTask(localTask);
+        setError("Ești offline. Task-ul a fost salvat local și se va sincroniza.");
+      } catch (e) {
+        console.error("IndexedDB queue error:", e);
+        setError("Ești offline. Task-ul a fost adăugat în UI, dar NU am putut salva în IndexedDB.");
+      }  
+
+      setText("");
+      setDeadline("");
+      setCategory("Personal");
+      // setError("Ești offline. Task-ul a fost salvat local și se va sincroniza.");
+
+      // opțional: ca să-l vezi sigur
+      setFilter("all");
+
+      return;
+    }
+  
+    // ✅ ONLINE: create prin API
+    try {
+      await apiCreateTask({
+        text: t,
+        category,
+        deadline: deadline || "",
+        order: maxOrder + 1,
+        uid: user.uid,
+      });
+  
+      const data = await apiGetTasks(user.uid);
+      setTasks(data.tasks || []);
+  
+      setText("");
+      setDeadline("");
+      setCategory("Personal");
+    } catch (err) {
+      console.error(err);
+      setError("Nu am putut crea task-ul.");
+    }
   }
-}
 
   // 4) UPDATE (toggle pending <-> completed)
-async function toggleTask(task) {
-  try {
-    if (!user) return;
-
-    // ✅ toggle prin API (pending <-> completed)
-    await apiToggleTask(task.id, user.uid);
-
-    // refresh list
-    const data = await apiGetTasks(user.uid);
-    setTasks(data.tasks || []);
-  } catch (err) {
-    console.error(err);
-    setError("Nu am putut schimba statusul task-ului.");
+  async function toggleTask(task) {
+    try {
+      if (!user) return;
+  
+      if (task.localOnly) {
+        setError("Task-ul e local (offline). Se sincronizează când revii online.");
+        return;
+      }
+     //trimit cererea catre backend
+      await apiToggleTask(task.id, user.uid);
+     //reîncarc lista
+      const data = await apiGetTasks(user.uid);
+      setTasks(data.tasks || []);
+    } catch (err) {
+      console.error(err);
+      setError("Nu am putut schimba statusul task-ului.");
+    }
   }
-}
 
 
   // 5) DELETE task
 async function removeTask(task) {
   try {
     if (!user) return;
+
+    // dacă task-ul e doar local (offline queue)
+    if (task.localOnly) {
+      setError("Task-ul e local (offline). Se sincronizează când revii online.");
+      setTimeout(() => setError(""), 4000);
+      return;
+    }
+
+    // dacă ești offline, nu încercăm API
+    if (!isOnline) {
+      setError("Ești offline. Nu pot șterge acum. Reîncearcă după ce revii online.");
+      setTimeout(() => setError(""), 4000);
+      return;
+    }
 
     await apiDeleteTask(task.id, user.uid);
 
@@ -174,41 +256,51 @@ async function removeTask(task) {
     return arr;
   }, [tasks, filter, sort]);
 
+  //tasks e lista completa de taskuri, fiecare task are un status
   const pendingCount = tasks.filter((t) => t.status === "pending").length;
   const doneCount = tasks.filter((t) => t.status === "completed").length;
 
   // onDragEnd: gestionarea finalizării unei operațiuni de drag-and-drop
   async function onDragEnd(result) {
-    // 🔒 Drag & drop permis DOAR în modul Manual
     if (sort !== "manual") return;
-
-    // dacă nu există destinație (ex: ai eliberat în afara listei)
-    if (!result.destination) {
-      const draggedTask = visibleTasks[result.source.index];
-      if (draggedTask) {
-        setDragErrorTaskId(draggedTask.id);
-        setTimeout(() => setDragErrorTaskId(null), 10000);
-      }
-      return;
-    }
-
-    setDragErrorTaskId(null);
-
+    if (!result.destination) return;
+  
     const from = result.source.index;
     const to = result.destination.index;
     if (from === to) return;
-
-    // Lucrăm pe lista vizibilă (cea afișată)
+  
     const newArr = [...visibleTasks];
     const [moved] = newArr.splice(from, 1);
     newArr.splice(to, 0, moved);
-
-    // Rescriem order pentru toate din newArr (1..n)
-    const batch = writeBatch(db);
-    newArr.forEach((t, idx) => {
-      batch.update(doc(db, "tasks", t.id), { order: idx + 1 });
+  
+    // update UI imediat
+    setTasks((prev) => {
+      const ids = newArr.map((x) => x.id);
+      const map = new Map(prev.map((t) => [t.id, t]));
+      return ids.map((id, idx) => ({ ...map.get(id), order: idx + 1 }));
     });
-    await batch.commit();
+  
+    // dacă e offline -> nu putem persista reorder
+    if (!isOnline) {
+      setError("Ești offline. Reordonarea nu se poate sincroniza acum.");
+      return;
+    }
+  
+    // persist în backend
+    try {
+      await fetch(`http://localhost:3000/api/tasks/reorder?uid=${encodeURIComponent(user.uid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds: newArr.map((x) => x.id) }),
+      });
+  
+      // reload lista
+      const data = await apiGetTasks(user.uid);
+      if (data.success) setTasks(data.tasks || []);
+    } catch (e) {
+      console.error(e);
+      setError("Nu am putut salva reordonarea.");
+    }
   }
 
   // Metoda prin care se creaza un cont nou: user + parola
@@ -223,6 +315,63 @@ async function removeTask(task) {
       setAuthError(err.message);
     }
   }
+
+
+  // Sincronizarea task-urilor offline cu backend-ul
+  async function syncOfflineTasks(uid) {
+    const offline = await getOfflineTasks();
+  
+    // nimic de sincronizat
+    if (!offline || offline.length === 0) return;
+  
+    try {
+      const res = await fetch(
+        `http://localhost:3000/api/tasks/sync?uid=${encodeURIComponent(uid)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tasks: offline.map((x) => ({
+              text: x.text,
+              deadline: x.deadline || "",
+              category: x.category || "Personal",
+              order: x.order,
+              createdAtClient: x.createdAtClient,
+            })),
+          }),
+        }
+      );
+  
+      // dacă backend-ul răspunde cu 4xx/5xx
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Sync HTTP ${res.status}: ${txt}`);
+      }
+  
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Sync failed");
+  
+      // ✅ ștergem local din IndexedDB după succes
+      for (const t of offline) {
+        // IMPORTANT: trebuie să existe t.localId în offlineDb
+        await removeOfflineTask(t.localId);
+      }
+  
+      // ✅ reîncărcăm lista din API ca să vezi imediat task-urile reale din Firestore
+      const refreshed = await apiGetTasks(uid);
+      if (refreshed.success) setTasks(refreshed.tasks || []);
+    } catch (e) {
+      console.error("syncOfflineTasks error:", e);
+      setError("Nu am putut sincroniza task-urile offline.");
+    }
+  }
+
+// Sincronizare la revenirea online:  revii online → trimite coada
+  useEffect(() => {
+    if (isOnline && user) {
+      syncOfflineTasks(user.uid);syncOfflineTasks
+    }
+  }, [isOnline, user]);
 
   // Metoda prin care se face login cu user + parola
   async function login(e) {
@@ -242,8 +391,9 @@ async function removeTask(task) {
     await signOut(auth);
   }
 
+//min-h-screen (Tailwind) → aplicația ocupă toată înălțimea ecranului
   return (
-    <div className="min-h-screen bg-pink-50">
+    <div className="min-h-screen bg-pink-50"> 
       {/* Auth section */}
       {!user ? (
         <AuthForm
@@ -258,7 +408,7 @@ async function removeTask(task) {
       ) : (
         <div className="app-container">
           <div className="app-card">
-            {/* Header */}
+            {/* Header afiseaza numarul de taskuri pending si numarul de task-uri completed + contine butonul Logout */}
             <Header pendingCount={pendingCount} doneCount={doneCount} onLogout={logout} user={user} />
 
             {/* Form */}

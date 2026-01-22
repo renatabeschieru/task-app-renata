@@ -7,6 +7,11 @@ const CATEGORIES = [
   { name: "Personal", emoji: "💗" },
   { name: "Shopping", emoji: "🛍️" },
   { name: "Home things", emoji: "🏠" },
+  { name: "Health", emoji: "💊" },
+  { name: "Fitness", emoji: "🏋️‍♀️" },
+  { name: "Hobbies", emoji: "🎨" },
+  { name: "Travel", emoji: "✈️" },
+  { name: "Others", emoji: "🔖" },
 ];
 
 export { MAX_LEN, CATEGORIES };

@@ -1,12 +1,16 @@
 import React from "react";
 import { Draggable } from "@hello-pangea/dnd";
 import { CATEGORIES } from "./TaskForm";
+//Import categoriile ca să poți afișa emoji-ul categoriei lângă text.
 
-// Emoji pentru categorie (doar pentru UI)
-function catEmoji(cat) {
+
+// Emoji pentru categorie, daca taskul are categorie ia emoji-ul; daca nu foloseste fallback 💗
+// catEmoji primește un string cat (ex: "Work").
+function catEmoji(cat) { 
   return CATEGORIES.find((c) => c.name === cat)?.emoji ?? "💗";
 }
 
+//componenta TaskItem care primeste props: task, index, onToggle, onRemove, dragErrorTaskId, sort
 export default function TaskItem({
   task,
   index,
@@ -15,20 +19,23 @@ export default function TaskItem({
   dragErrorTaskId,
   sort,
 }) {
+  //variabila boolean care verifica daca statusul taskului este "completed"
   const done = task.status === "completed";
 
   return (
     <Draggable
-  draggableId={task.id}
-  index={index}
-  isDragDisabled={sort !== "manual"}
+    
+  draggableId={task.id} //Draggable trebuie să primească un draggableId unic: task.id.
+  index={index}         //index-ul taskului în lista.
+  isDragDisabled={sort !== "manual"} //dezactivează drag dacă sort nu e "manual"
 >
       {(prov) => (
         <div
           ref={prov.innerRef}
           {...prov.draggableProps}
           className={`${done ? "opacity-70" : ""}`}
-        >
+        > 
+        {/* dacă e done, îl faci semi-transparent */}
           <div className={`task-card ${done ? "task-done" : ""}`}>
             {/* Drag handle */}
             <div
@@ -53,7 +60,7 @@ export default function TaskItem({
               <div className="flex items-center gap-2">
                 <span className="text-lg">{catEmoji(task.category)}</span>
                 <span className="font-semibold text-rose-800">{task.text}</span>
-                <span className="text-xs px-2 py-0.5 rounded-full border border-pink-200 text-rose-600">
+                <span className="text-xs px-2 py-0.5 rounded-full border border-pink-200 text-green-700">
                   {task.category || "Personal"}
                 </span>
               </div>
@@ -66,7 +73,7 @@ export default function TaskItem({
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => onToggle(task)}
+                onClick={() => onToggle(task)} //trimiți task-ul către funcția din App.jsx
                 className="task-btn"
                 type="button"
               >

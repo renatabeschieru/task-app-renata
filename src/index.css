@@ -125,7 +125,7 @@
     transform: translateY(-2px);
     box-shadow: 0 10px 26px rgba(0, 0, 0, 0.1);
   }
-  
+ /*taiem taskul cand e done */
   .task-done {
     opacity: 0.6;
     text-decoration: line-through;

@@ -11,10 +11,10 @@ export default function Header({ pendingCount, doneCount, onLogout, user}) {
           Bifează task-urile zilnice ✨
         </p>
       </div>
-
+{/*//Trimiți valorile calculate (pendingCount, doneCount) către componenta Header și le afișezi aici.*/}
       <div className="text-right">
         <div className="category-form-label">Pending</div>
-        <div className="font-bold text-rose-700">{pendingCount}</div>
+        <div className="font-bold text-rose-700">{pendingCount}</div> 
         <div className="category-form-label">Done</div>
         <div className="font-bold text-rose-700">{doneCount}</div>
         {onLogout && (
