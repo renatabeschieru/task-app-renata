@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables
+backend/serviceAccountKey.json
+serviceAccountKey.json
+.env
